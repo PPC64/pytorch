@@ -36,15 +36,14 @@ else
     LDFLAGS="$LDFLAGS -Wl,-rpath,\$ORIGIN"
 fi
 C_FLAGS="$BASIC_C_FLAGS $LDFLAGS"
-NVCC_TARGETS="THC THCS THCUNN"
 function build() {
   mkdir -p build/$1
   cd build/$1
   BUILD_C_FLAGS=''
-  eval 'case '$1' in
-      '${NVCC_TARGETS//" "/" | "}') BUILD_C_FLAGS=$C_FLAGS;;
+  case $1 in
+      THCS | THCUNN ) BUILD_C_FLAGS=$C_FLAGS;;
       *) BUILD_C_FLAGS=$C_FLAGS" -fexceptions";;
-  esac'
+  esac
   cmake ../../$1 -DCMAKE_MODULE_PATH="$BASE_DIR/cmake/FindCUDA" \
               -DTorch_FOUND="1" \
               -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
@@ -97,9 +96,9 @@ build TH
 build THS
 build THNN
 if [[ $WITH_CUDA -eq 1 ]]; then
-    for i in $NVCC_TARGETS; do
-      build $i
-    done
+    build THC
+    build THCS
+    build THCUNN
 fi
 if [[ $WITH_NCCL -eq 1 ]]; then
     build_nccl
