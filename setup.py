@@ -17,10 +17,21 @@ from tools.setup_helpers.cuda import WITH_CUDA, CUDA_HOME
 from tools.setup_helpers.cudnn import WITH_CUDNN, CUDNN_LIB_DIR, CUDNN_INCLUDE_DIR
 from tools.setup_helpers.split_types import split_types
 DEBUG = check_env_flag('DEBUG')
-WITH_DISTRIBUTED = check_env_flag('WITH_DISTRIBUTED')
+WITH_DISTRIBUTED = not check_env_flag('NO_DISTRIBUTED')
 WITH_DISTRIBUTED_MW = WITH_DISTRIBUTED and check_env_flag('WITH_DISTRIBUTED_MW')
 WITH_NCCL = WITH_CUDA and platform.system() != 'Darwin'
 SYSTEM_NCCL = False
+
+
+################################################################################
+# Workaround setuptools -Wstrict-prototypes warnings
+# I lifted this code from https://stackoverflow.com/a/29634231/23845
+################################################################################
+import distutils.sysconfig
+cfg_vars = distutils.sysconfig.get_config_vars()
+for key, value in cfg_vars.items():
+    if type(value) == str:
+            cfg_vars[key] = value.replace("-Wstrict-prototypes", "")
 
 ################################################################################
 # Monkey-patch setuptools to compile in parallel
@@ -145,6 +156,10 @@ class build_ext(setuptools.command.build_ext.build_ext):
             print('-- Building NCCL library')
         else:
             print('-- Not using NCCL')
+        if WITH_DISTRIBUTED:
+            print('-- Building with distributed package ')
+        else:
+            print('-- Building without distributed package')
 
         # cwrap depends on pyyaml, so we can't import it earlier
         from tools.cwrap import cwrap
@@ -156,10 +171,14 @@ class build_ext(setuptools.command.build_ext.build_ext):
         from tools.cwrap.plugins.NullableArguments import NullableArguments
         from tools.cwrap.plugins.CuDNNPlugin import CuDNNPlugin
         from tools.cwrap.plugins.WrapDim import WrapDim
+        from tools.cwrap.plugins.AssertNDim import AssertNDim
+        from tools.cwrap.plugins.Broadcast import Broadcast
+        from tools.cwrap.plugins.ProcessorSpecificPlugin import ProcessorSpecificPlugin
         thp_plugin = THPPlugin()
         cwrap('torch/csrc/generic/TensorMethods.cwrap', plugins=[
-            BoolOption(), thp_plugin, AutoGPU(condition='IS_CUDA'),
-            ArgcountSortPlugin(), KwargsPlugin(), WrapDim()
+            ProcessorSpecificPlugin(), BoolOption(), thp_plugin,
+            AutoGPU(condition='IS_CUDA'), ArgcountSortPlugin(), KwargsPlugin(),
+            AssertNDim(), WrapDim(), Broadcast()
         ])
         cwrap('torch/csrc/cudnn/cuDNN.cwrap', plugins=[
             CuDNNPlugin(), NullableArguments()
@@ -206,7 +225,10 @@ class clean(distutils.command.clean.clean):
 include_dirs = []
 library_dirs = []
 extra_link_args = []
-extra_compile_args = ['-std=c++11', '-Wno-write-strings']
+extra_compile_args = ['-std=c++11', '-Wno-write-strings',
+                      # Python 2.6 requires -fno-strict-aliasing, see
+                      # http://legacy.python.org/dev/peps/pep-3123/
+                      '-fno-strict-aliasing']
 if os.getenv('PYTORCH_BINARY_BUILD') and platform.system() == 'Linux':
     print('PYTORCH_BINARY_BUILD found. Static linking libstdc++ on Linux')
     extra_compile_args += ['-static-libstdc++']
@@ -264,6 +286,7 @@ main_sources = [
     "torch/csrc/DynamicTypes.cpp",
     "torch/csrc/byte_order.cpp",
     "torch/csrc/utils.cpp",
+    "torch/csrc/expand_utils.cpp",
     "torch/csrc/utils/object_ptr.cpp",
     "torch/csrc/utils/tuple_parser.cpp",
     "torch/csrc/allocators.cpp",
@@ -308,6 +331,7 @@ if WITH_DISTRIBUTED:
             "torch/csrc/distributed/Tensor.cpp",
             "torch/csrc/distributed/Storage.cpp",
         ]
+        extra_compile_args += ['-DWITH_DISTRIBUTED_MW']
     include_dirs += [tmp_install_path + "/include/THD"]
     main_link_args += [THD_LIB]
 
@@ -324,7 +348,7 @@ if WITH_CUDA:
     extra_link_args.append('-Wl,-rpath,' + cuda_lib_path)
     extra_compile_args += ['-DWITH_CUDA']
     extra_compile_args += ['-DCUDA_LIB_PATH=' + cuda_lib_path]
-    main_libraries += ['cudart']
+    main_libraries += ['cudart', 'nvToolsExt']
     main_link_args += [THC_LIB, THCS_LIB, THCUNN_LIB]
     main_sources += [
         "torch/csrc/cuda/Module.cpp",
@@ -332,6 +356,7 @@ if WITH_CUDA:
         "torch/csrc/cuda/Stream.cpp",
         "torch/csrc/cuda/AutoGPU.cpp",
         "torch/csrc/cuda/utils.cpp",
+        "torch/csrc/cuda/expand_utils.cpp",
         "torch/csrc/cuda/serialization.cpp",
     ]
     main_sources += split_types("torch/csrc/cuda/Tensor.cpp")
@@ -376,7 +401,7 @@ nvcc_extra_compile_args = extra_compile_args
 extra_compile_args += ['-fexceptions']
 
 extensions = []
-packages = find_packages(exclude=('tools.*',))
+packages = find_packages(exclude=('tools', 'tools.*',))
 
 C = Extension("torch._C",
               libraries=main_libraries,

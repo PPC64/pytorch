@@ -151,7 +151,7 @@ THSTensor *THSTensor_(newWithTensorAndSize)(THLongTensor *indices, THTensor *val
     ignore = THLongTensor_new();
     THLongTensor *computed_indices_sizes = THLongTensor_new();
     THLongTensor *computed_sizes = THLongTensor_newWithSize1d(nDimI + nDimV);
-    THLongTensor_max(computed_indices_sizes, ignore, indices, 1);
+    THLongTensor_max(computed_indices_sizes, ignore, indices, 1, 1);
     THLongTensor_add(computed_indices_sizes, computed_indices_sizes, 1);
     for (int d = 0; d < nDimI; d++) {
         THTensor_fastSet1d(computed_sizes, d, THTensor_fastGet1d(computed_indices_sizes, d));
@@ -169,7 +169,9 @@ THSTensor *THSTensor_(newWithTensorAndSize)(THLongTensor *indices, THTensor *val
         "number of dimensions must be nDimI + nDimV");
     THSTensor_(rawResize)(self, nDimI, nDimV, THLongStorage_data(sizes));
   }
-  THSTensor_(_set)(self, indices, values);
+  // NB: by default, we do NOT clone indices/values into the sparse tensor.
+  // Efficient API by default!
+  THSTensor_(_move)(self, THLongTensor_newWithTensor(indices), THTensor_(newWithTensor)(values));
 
   return self;
 }
@@ -233,6 +235,7 @@ THSTensor *THSTensor_(newClone)(THSTensor *self) {
 
   THSTensor_(_set)(other, self->indices, self->values);
 
+  other->coalesced = self->coalesced;
   other->nnz = self->nnz;
   return other;
 }

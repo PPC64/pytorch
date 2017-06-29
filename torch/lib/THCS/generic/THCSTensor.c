@@ -151,7 +151,7 @@ THCSTensor *THCSTensor_(newWithTensorAndSize)(THCState *state, THCIndexTensor *i
     THLongTensor *computed_sizes;
     THCudaLongTensor *ignore = THCudaLongTensor_new(state);
     THCIndexTensor *s = THCIndexTensor_(new)(state);
-    THCIndexTensor_(max)(state, s, ignore, indices, 1);
+    THCIndexTensor_(max)(state, s, ignore, indices, 1, 1);
     THCIndexTensor_(add)(state, s, s, 1);
 
     // TODO make sure this doesn't sync the hell out of everything
@@ -171,7 +171,9 @@ THCSTensor *THCSTensor_(newWithTensorAndSize)(THCState *state, THCIndexTensor *i
         "number of dimensions must be nDimI + nDimV");
     THCSTensor_(rawResize)(state, self, nDimI, nDimV, THLongStorage_data(sizes));
   }
-  THCSTensor_(_set)(state, self, indices, values);
+  // NB: by default, we do NOT clone indices/values into the sparse tensor.
+  // Efficient API by default!
+  THCSTensor_(_move)(state, self, THCIndexTensor_(newWithTensor)(state, indices), THCTensor_(newWithTensor)(state, values));
 
   return self;
 }

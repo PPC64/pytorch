@@ -15,11 +15,14 @@ from torch.autograd import Variable
 
 torch.set_default_tensor_type('torch.DoubleTensor')
 
+SEED = 0
+
 
 def run_tests():
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('--seed', type=int, default=123)
     args, remaining = parser.parse_known_args()
+    SEED = args.seed
     torch.manual_seed(args.seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(args.seed)
@@ -118,6 +121,11 @@ def is_iterable(obj):
 class TestCase(unittest.TestCase):
     precision = 1e-5
 
+    def setUp(self):
+        torch.manual_seed(SEED)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(SEED)
+
     def assertTensorsSlowEqual(self, x, y, prec=None, message=''):
         max_err = 0
         self.assertEqual(x.size(), y.size())
@@ -189,7 +197,10 @@ class TestCase(unittest.TestCase):
                 assertTensorsEqual(x, y)
         elif type(x) == str and type(y) == str:
             super(TestCase, self).assertEqual(x, y)
+        elif type(x) == set and type(y) == set:
+            super(TestCase, self).assertEqual(x, y)
         elif is_iterable(x) and is_iterable(y):
+            super(TestCase, self).assertEqual(len(x), len(y))
             for x_, y_ in zip(x, y):
                 self.assertEqual(x_, y_, prec, message)
         else:
@@ -237,6 +248,10 @@ class TestCase(unittest.TestCase):
             if id(obj) == id(elem):
                 return
         raise AssertionError("object not found in iterable")
+
+    if sys.version_info < (3, 2):
+        # assertRaisesRegexp renamed assertRaisesRegex in 3.2
+        assertRaisesRegex = unittest.TestCase.assertRaisesRegexp
 
 
 def download_file(url, path, binary=True):

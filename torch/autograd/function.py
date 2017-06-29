@@ -15,9 +15,10 @@ class _ContextMethodMixin(object):
         :func:`forward` **method.**
 
         Later, saved tensors can be accessed through the :attr:`saved_tensors`
-        attribute. Before returning them to the user, a check is made, to
-        ensure they weren't used in any in-place operation that modified
-        their content.
+        attribute; or, if the corresponding Variable is needed (e.g. for double
+        backwards), those can be accessed through the :attr:`saved_variables`
+        attribute.  Before returning them to the user, a check is made, to ensure
+        they weren't used in any in-place operation that modified their content.
 
         Arguments can also be ``None``.
         """
@@ -30,7 +31,7 @@ class _ContextMethodMixin(object):
         :func:`forward` **method, and all arguments should be inputs.**
 
         Every tensor that's been modified in-place in a call to :func:`forward`
-        should be given to this function, to ensure correcness of our checks.
+        should be given to this function, to ensure correctness of our checks.
         It doesn't matter wheter the function is called before or after
         modification.
         """
@@ -91,11 +92,20 @@ class BackwardCFunction(_C._FunctionBase, _ContextMethodMixin, _HookMixin):
 
 
 class FunctionMeta(type):
+    """Function metaclass.
+
+    This metaclass sets up the following properties:
+        _is_legacy: True if forward is not defined as a static method.
+        _backward_cls: The Function class corresponding to the differentiated
+            version of this function (which is generated on the fly by this
+            metaclass).
+    """
 
     def __init__(cls, name, bases, attrs):
         for super_cls in cls.mro():
-            if 'forward' in super_cls.__dict__:
-                has_static_forward = isinstance(super_cls.__dict__['forward'], staticmethod)
+            forward = super_cls.__dict__.get('forward')
+            if forward is not None:
+                has_static_forward = isinstance(forward, staticmethod) or isinstance(forward, classmethod)
                 break
 
         setattr(cls, '_is_legacy', not has_static_forward)
@@ -134,6 +144,8 @@ class Function(with_metaclass(FunctionMeta, _C._FunctionBase, _ContextMethodMixi
     Attributes:
         saved_tensors: Tuple of Tensors that were saved in the call to
             :func:`forward`.
+        saved_variables: Tuple of Variables that correspond to the tensors
+            saved in the call to :func:`forward`.
         needs_input_grad: Tuple of booleans of length :attr:`num_inputs`,
             indicating whether a given input requires gradient. This can be
             used to optimize buffers saved for backward, and ignoring gradient

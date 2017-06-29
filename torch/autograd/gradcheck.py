@@ -81,9 +81,9 @@ def get_numerical_jacobian(fn, input, target, eps=1e-3):
         for i in range(flat_tensor.nelement()):
             orig = flat_tensor[i]
             flat_tensor[i] = orig - eps
-            outa.copy_(fn(input))
+            outa.copy_(fn(input), broadcast=False)
             flat_tensor[i] = orig + eps
-            outb.copy_(fn(input))
+            outb.copy_(fn(input), broadcast=False)
             flat_tensor[i] = orig
 
             outb.add_(-1, outa).div_(2 * eps)
@@ -101,7 +101,7 @@ def get_analytical_jacobian(input, output):
         flat_grad_output.zero_()
         flat_grad_output[i] = 1
         zero_gradients(input)
-        output.backward(grad_output, retain_variables=True)
+        output.backward(grad_output, retain_graph=True)
         for jacobian_x, d_x in zip(jacobian, iter_gradients(input)):
             if d_x is None:
                 jacobian_x[:, i].zero_()
@@ -172,3 +172,37 @@ def gradcheck(func, inputs, eps=1e-6, atol=1e-5, rtol=1e-3):
             return False
 
     return True
+
+
+def gradgradcheck(func, inputs, grad_outputs, eps=1e-6, atol=1e-5, rtol=1e-3):
+    """Check gradients of gradients computed via small finite differences
+       against analytical gradients
+    This function checks that backpropagating through the gradients computed
+    to the given grad_outputs are correct.
+
+    The check between numerical and analytical has the same behaviour as
+    numpy.allclose https://docs.scipy.org/doc/numpy/reference/generated/numpy.allclose.html
+    meaning it check that
+        absolute(a - n) <= (atol + rtol * absolute(n))
+    is true for all elements of analytical gradient a and numerical gradient n.
+
+    Args:
+        func: Python function that takes Variable inputs and returns
+            a tuple of Variables
+        inputs: tuple of Variables
+        grad_outputs: tuple of Variables
+        eps: perturbation for finite differences
+        atol: absolute tolerance
+        rtol: relative tolerance
+
+    Returns:
+        True if all differences satisfy allclose condition
+    """
+    def new_func(*inputs):
+        outputs = func(*inputs)
+        outputs = _as_tuple(outputs)
+        inputs = tuple(x for x in inputs if isinstance(x, Variable) if x.requires_grad)
+        grad_inputs = torch.autograd.grad(outputs, inputs, grad_outputs, only_inputs=True)
+        return grad_inputs
+
+    return gradcheck(new_func, inputs, eps, atol, rtol)

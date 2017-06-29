@@ -286,20 +286,69 @@ void THTensor_(resize5d)(THTensor *self, long size0, long size1, long size2, lon
 }
 
 THTensor* THTensor_(newExpand)(THTensor *tensor, THLongStorage *sizes) {
-  THArgCheck(THLongStorage_size(sizes) >= THTensor_(nDimension)(tensor), 1, "the number of sizes provided \
-      must be greater or equal to the number of dimensions in the tensor");
+  THTensor *result = THTensor_(new)();
+  THTensor_(expand)(result, tensor, sizes);
+  return result;
+}
+
+void THTensor_(expand)(THTensor *r, THTensor *tensor, THLongStorage *sizes) {
   THArgCheck(THTensor_(nDimension)(tensor) > 0, 0, "can't expand an empty tensor");
+  THArgCheck(THLongStorage_size(sizes) >= THTensor_(nDimension)(tensor), 1,
+             "the number of sizes provided must be greater or equal to the "
+             "number of dimensions in the tensor");
 
   long *expandedSizes;
   long *expandedStrides;
-  THLongStorage_calculateExpandGeometry(tensor->size, tensor->stride, THTensor_(nDimension)(tensor), sizes, &expandedSizes, &expandedStrides);
+  char error_buffer[1024];
+  int ret =
+      THLongStorage_inferExpandGeometry(tensor->size, tensor->stride, THTensor_(nDimension)(tensor),
+                                        sizes, &expandedSizes, &expandedStrides, error_buffer, 1024);
 
-  THTensor *result = THTensor_(new)();
-  THTensor_(setStorageNd)(result, THTensor_(storage)(tensor), THTensor_(storageOffset)(tensor), THLongStorage_size(sizes), expandedSizes, expandedStrides);
+  if (ret != 0) {
+    THError(error_buffer);
+    return;
+  }
+
+  THTensor_(setStorageNd)(r, THTensor_(storage)(tensor), THTensor_(storageOffset)(tensor),
+                          THLongStorage_size(sizes), expandedSizes, expandedStrides);
   THFree(expandedSizes);
   THFree(expandedStrides);
+}
 
-  return result;
+
+void THTensor_(expandNd)(THTensor **rets, THTensor **ops, int count) {
+  for (int i = 0; i < count; ++i) {
+    THArgCheck(THTensor_(nDimension)(ops[i]) > 0, i, "can't expand empty tensor %d", i);
+  }
+
+  long *op_sizes[count];
+  long op_dims[count];
+
+  for (int i = 0; i < count; ++i) {
+    op_sizes[i] = ops[i]->size;
+    op_dims[i] = ops[i]->nDimension;
+  }
+
+  THLongStorage *sizes = THLongStorage_new();
+  char error_buffer[1024];
+  int ret = THLongStorage_inferSizeN(sizes,
+                                     count,
+                                     op_sizes,
+                                     op_dims,
+                                     error_buffer,
+                                     1024);
+
+  if(ret != 0) {
+    THLongStorage_free(sizes);
+    THError(error_buffer);
+    return;
+  }
+
+  for (int i = 0; i < count; ++i) {
+    THTensor_(expand)(rets[i], ops[i], sizes);
+  }
+
+  THLongStorage_free(sizes);
 }
 
 void THTensor_(set)(THTensor *self, THTensor *src)

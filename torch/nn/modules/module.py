@@ -210,15 +210,16 @@ class Module(object):
                 raise RuntimeError(
                     "forward hooks should never return any values, but '{}'"
                     "didn't return None".format(hook))
-        var = result
-        while not isinstance(var, Variable):
-            var = var[0]
-        grad_fn = var.grad_fn
-        if grad_fn is not None and len(self._backward_hooks) > 0:
-            for hook in self._backward_hooks.values():
-                wrapper = functools.partial(hook, self)
-                functools.update_wrapper(wrapper, hook)
-                grad_fn.register_hook(wrapper)
+        if len(self._backward_hooks) > 0:
+            var = result
+            while not isinstance(var, Variable):
+                var = var[0]
+            grad_fn = var.grad_fn
+            if grad_fn is not None:
+                for hook in self._backward_hooks.values():
+                    wrapper = functools.partial(hook, self)
+                    functools.update_wrapper(wrapper, hook)
+                    grad_fn.register_hook(wrapper)
         return result
 
     def __getattr__(self, name):
@@ -338,7 +339,7 @@ class Module(object):
         if len(missing) > 0:
             raise KeyError('missing keys in state_dict: "{}"'.format(missing))
 
-    def parameters(self, memo=None):
+    def parameters(self):
         """Returns an iterator over module parameters.
 
         This is typically passed to an optimizer.
@@ -371,6 +372,17 @@ class Module(object):
             submodule_prefix = prefix + ('.' if prefix else '') + mname
             for name, p in module.named_parameters(memo, submodule_prefix):
                 yield name, p
+
+    def _all_buffers(self, memo=None):
+        if memo is None:
+            memo = set()
+        for name, b in self._buffers.items():
+            if b is not None and b not in memo:
+                memo.add(b)
+                yield b
+        for module in self.children():
+            for b in module._all_buffers(memo):
+                yield b
 
     def children(self):
         """Returns an iterator over immediate children modules."""
@@ -462,8 +474,11 @@ class Module(object):
         """Sets gradients of all model parameters to zero."""
         for p in self.parameters():
             if p.grad is not None:
-                p.grad.data.zero_()
-                p.grad.detach_()
+                if p.grad.volatile:
+                    p.grad.data.zero_()
+                else:
+                    data = p.grad.data
+                    p.grad = Variable(data.new().resize_as_(data).zero_())
 
     def share_memory(self):
         return self._apply(lambda t: t.share_memory_())

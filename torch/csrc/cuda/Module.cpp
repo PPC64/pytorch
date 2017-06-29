@@ -161,7 +161,7 @@ PyObject * THCPModule_getDriverVersion(PyObject *self)
 PyObject * THCPModule_getRNGState(PyObject *_unused)
 {
   HANDLE_TH_ERRORS
-  THPByteTensorPtr res = (THPByteTensor *)THPByteTensor_NewEmpty();
+  THPByteTensorPtr res((THPByteTensor *)THPByteTensor_NewEmpty());
   if (!res) return NULL;
   THCRandom_getRNGState(state, res->cdata);
   return (PyObject *)res.release();
@@ -248,7 +248,10 @@ PyObject * THCPModule_cudaSleep(PyObject *_unused, PyObject *cycles)
 PyObject * THCPModule_cudaLockMutex(PyObject *module)
 {
   auto mutex = THCCachingAllocator_getCudaFreeMutex();
-  mutex->lock();
+  {
+    AutoNoGIL no_gil;
+    mutex->lock();
+  }
   Py_RETURN_NONE;
 }
 

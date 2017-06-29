@@ -17,8 +17,12 @@ namespace torch { namespace autograd {
 
 using thpp::Tensor;
 
+#ifndef CUDNN_BN_MIN_EPSILON
+#define CUDNN_BN_MIN_EPSILON 0
+#endif
+
 auto BatchNormForward::apply(const variable_list& inputs) -> variable_list {
-  if (inputs.size() != 3) throw std::runtime_error("expected three inputs");
+  check_input_variables("BatchNorm", inputs, 3, 1);
 
   auto& input = inputs[0];
   auto& weight = inputs[1];
@@ -41,7 +45,7 @@ auto BatchNormForward::apply(const variable_list& inputs) -> variable_list {
   std::unique_ptr<Tensor> save_std(output->newTensor());
   save_std->resizeAs(*running_var);
 
-  if (use_cudnn) {
+  if (use_cudnn && eps >= CUDNN_BN_MIN_EPSILON) {
 #ifdef WITH_CUDNN
     torch::cudnn::cudnn_batch_norm_forward(
         state,
@@ -85,6 +89,7 @@ auto BatchNormForward::apply(const variable_list& inputs) -> variable_list {
 };
 
 auto BatchNormBackward::apply(const variable_list& grad_outputs) -> variable_list {
+  check_input_variables("BatchNormBackward", grad_outputs, 1);
   auto input = this->input.unpack_data();
   auto weight = this->weight.unpack_data();
   auto bias = this->bias.unpack_data();
@@ -122,7 +127,7 @@ auto BatchNormBackward::apply(const variable_list& grad_outputs) -> variable_lis
     }
   }
 
-  if (use_cudnn) {
+  if (use_cudnn && eps >= CUDNN_BN_MIN_EPSILON) {
 #ifdef WITH_CUDNN
     torch::cudnn::cudnn_batch_norm_backward(
         state,

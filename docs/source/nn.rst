@@ -160,7 +160,7 @@ Pooling Layers
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: AdaptiveMaxPool2d
-    :members:       
+    :members:
 
 :hidden:`AdaptiveAvgPool1d`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -174,7 +174,41 @@ Pooling Layers
 .. autoclass:: AdaptiveAvgPool2d
     :members:
 
-       
+
+Padding Layers
+--------------
+
+:hidden:`ReflectionPad2d`
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: ReflectionPad2d
+    :members:
+
+:hidden:`ReplicationPad2d`
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: ReplicationPad2d
+    :members:
+
+:hidden:`ReplicationPad3d`
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: ReplicationPad3d
+    :members:
+
+:hidden:`ZeroPad2d`
+~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: ZeroPad2d
+    :members:
+
+:hidden:`ConstantPad2d`
+~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: ConstantPad2d
+    :members:
+
+
 Non-linear Activations
 ----------------------------------
 
@@ -194,6 +228,12 @@ Non-linear Activations
 ~~~~~~~~~~~~~
 
 .. autoclass:: ELU
+    :members:
+
+:hidden:`SELU`
+~~~~~~~~~~~~~~
+
+.. autoclass:: SELU
     :members:
 
 :hidden:`PReLU`
@@ -390,6 +430,12 @@ Dropout layers
 .. autoclass:: Dropout3d
     :members:
 
+:hidden:`AlphaDropout`
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: AlphaDropout
+    :members:
+
 
 Sparse layers
 ----------------------------------
@@ -400,8 +446,20 @@ Sparse layers
 .. autoclass:: Embedding
     :members:
 
+:hidden:`EmbeddingBag`
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: EmbeddingBag
+    :members:
+
 Distance functions
 ----------------------------------
+
+:hidden:`CosineSimilarity`
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: CosineSimilarity
+    :members:
 
 :hidden:`PairwiseDistance`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -437,6 +495,12 @@ Loss functions
 .. autoclass:: NLLLoss
     :members:
 
+:hidden:`PoissonNLLLoss`
+~~~~~~~~~~~~~~~~~
+
+.. autoclass:: PoissonNLLLoss
+    :members:
+
 :hidden:`NLLLoss2d`
 ~~~~~~~~~~~~~~~~~~~
 
@@ -453,6 +517,12 @@ Loss functions
 ~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: BCELoss
+    :members:
+
+:hidden:`BCEWithLogitsLoss`
+~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: BCEWithLogitsLoss
     :members:
 
 :hidden:`MarginRankingLoss`
@@ -519,6 +589,12 @@ Vision layers
 .. autoclass:: PixelShuffle
     :members:
 
+:hidden:`Upsample`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: Upsample
+    :members:
+
 :hidden:`UpsamplingNearest2d`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -532,13 +608,19 @@ Vision layers
     :members:
 
 
-Multi-GPU layers
-----------------
+DataParallel layers (multi-GPU, distributed)
+--------------------------------------------
 
 :hidden:`DataParallel`
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: DataParallel
+    :members:
+
+:hidden:`DistributedDataParallel`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: torch.nn.parallel.DataParallel
     :members:
 
 
@@ -682,7 +764,7 @@ Pooling functions
 
 .. autofunction:: adaptive_avg_pool2d
 
-   
+
 Non-linear activation functions
 -------------------------------
 
@@ -711,6 +793,11 @@ Non-linear activation functions
 ~~~~~~~~~~~~~
 
 .. autofunction:: elu
+
+:hidden:`selu`
+~~~~~~~~~~~~~~
+
+.. autofunction:: selu
 
 :hidden:`leaky_relu`
 ~~~~~~~~~~~~~~~~~~~~
@@ -806,6 +893,11 @@ Dropout functions
 
 .. autofunction:: dropout
 
+:hidden:`alpha_dropout`
+~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: alpha_dropout
+
 Distance functions
 ----------------------------------
 
@@ -813,6 +905,11 @@ Distance functions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autofunction:: pairwise_distance
+
+:hidden:`cosine_similarity`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: cosine_similarity
 
 
 Loss functions
@@ -823,6 +920,10 @@ Loss functions
 
 .. autofunction:: nll_loss
 
+:hidden:`poisson_nll_loss`
+~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: poisson_nll_loss
 
 :hidden:`kl_div`
 ~~~~~~~~~~~~~~~~
@@ -838,6 +939,11 @@ Loss functions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autofunction:: binary_cross_entropy
+
+:hidden:`binary_cross_entropy_with_logits`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: binary_cross_entropy_with_logits
 
 :hidden:`smooth_l1_loss`
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -861,6 +967,23 @@ Vision functions
 ~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autofunction:: pad
+
+:hidden:`upsample`
+~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: upsample
+
+:hidden:`upsample_nearest`
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: upsample_nearest
+
+:hidden:`upsample_bilinear`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: upsample_bilinear
+
+
 
 torch.nn.init
 =============

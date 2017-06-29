@@ -63,7 +63,7 @@ static PyObject * THPModule_initNames(PyObject *self, PyObject *arg)
 {
   static std::vector<std::string> names;
 
-  THPObjectPtr types = PySequence_Fast(arg, "expected a sequence");
+  THPObjectPtr types(PySequence_Fast(arg, "expected a sequence"));
   if (!types) return NULL;
 
   int num_classes = PySequence_Fast_GET_SIZE(types.get());
@@ -73,7 +73,7 @@ static PyObject * THPModule_initNames(PyObject *self, PyObject *arg)
     THPUtils_assert(PyType_Check(obj), "expected a PyTypeObject");
     PyTypeObject* type = (PyTypeObject*)obj;
 
-    THPObjectPtr module_name = PyObject_GetAttrString(obj, "__module__");
+    THPObjectPtr module_name(PyObject_GetAttrString(obj, "__module__"));
     if (!module_name) return NULL;
     THPUtils_assert(THPUtils_checkString(module_name.get()),
         "expected __module__ to be a string");
@@ -213,6 +213,7 @@ dispatch:                                                                      \
 IMPLEMENT_STATELESS(sigmoid)
 IMPLEMENT_STATELESS(log)
 IMPLEMENT_STATELESS(log1p)
+IMPLEMENT_STATELESS(lgamma)
 IMPLEMENT_STATELESS(exp)
 IMPLEMENT_STATELESS(cos)
 IMPLEMENT_STATELESS(acos)
@@ -465,6 +466,64 @@ PyObject *THPModule_addDocStr(PyObject *_unused, PyObject *args)
   Py_RETURN_NONE;
 }
 
+
+PyObject *THPModule_inferSize(PyObject *_unused, PyObject *args)
+{
+  HANDLE_TH_ERRORS
+  Py_ssize_t num_args = args ? PyTuple_Size(args) : 0;
+  THPUtils_assert(num_args == 2, "expected exactly 2 arguments");
+  PyObject *arg1 = PyTuple_GET_ITEM(args, 0);
+  THPUtils_assert(THPSize_Check(arg1), "expected a torch.Size as argument 1");
+  PyObject *arg2 = PyTuple_GET_ITEM(args, 1);
+  THPUtils_assert(THPSize_Check(arg2), "expected a torch.Size as argument 2");
+
+  THLongStoragePtr size1_guard = THPUtils_unpackSize(arg1);
+  THLongStorage *size1 = size1_guard.get();
+  THLongStoragePtr size2_guard = THPUtils_unpackSize(arg2);
+  THLongStorage *size2 = size2_guard.get();
+  THLongStoragePtr sizes_guard(THLongStorage_new());
+  THLongStorage *sizes = sizes_guard.get();
+
+  char error_buffer[1024];
+  int ret = THLongStorage_inferSize2(sizes, size1->data, size1->size, size2->data, size2->size, error_buffer, 1024);
+  THPUtils_assert(ret == 0, error_buffer);
+  return THPSize_New(sizes->size, sizes->data);
+  END_HANDLE_TH_ERRORS
+}
+
+static PyObject *THPModule_setBackcompatBroadcastWarn(PyObject *module, PyObject *arg) {
+  THPUtils_assert(PyBool_Check(arg), "set_backcompat_broadcast_warn expects a bool, "
+          "but got %s", THPUtils_typename(arg));
+  setBackCompatBroadcastWarn(arg == Py_True);
+  Py_RETURN_NONE;
+}
+
+static PyObject *THPModule_getBackcompatBroadcastWarn(PyObject *module)
+{
+  return getBackCompatBroadcastWarn() ? Py_True : Py_False;
+}
+
+static PyObject *THPModule_setBackcompatKeepdimWarn(PyObject *module, PyObject *arg) {
+  THPUtils_assert(PyBool_Check(arg), "set_backcompat_keepdim_warn expects a bool, "
+          "but got %s", THPUtils_typename(arg));
+  setBackCompatKeepdimWarn(arg == Py_True);
+  Py_RETURN_NONE;
+}
+
+static PyObject *THPModule_getBackcompatKeepdimWarn(PyObject *module)
+{
+  return getBackCompatKeepdimWarn() ? Py_True : Py_False;
+}
+
+PyObject *THPModule_hasDistributed(PyObject *_unused)
+{
+#ifdef WITH_DISTRIBUTED
+  Py_RETURN_TRUE;
+#else
+  Py_RETURN_FALSE;
+#endif
+}
+
 #ifdef WITH_CUDA
 extern PyObject * THCPModule_initExtension(PyObject *self);
 extern PyObject * THCPModule_setDevice_wrap(PyObject *self, PyObject *arg);
@@ -497,6 +556,7 @@ static PyMethodDef TorchMethods[] = {
   {"_add_docstr",     (PyCFunction)THPModule_addDocStr,       METH_VARARGS, NULL},
   {"_sparse_init",    (PyCFunction)THSPModule_initExtension,  METH_NOARGS,  NULL},
   {"_init_names",     (PyCFunction)THPModule_initNames,       METH_O,       NULL},
+  {"_has_distributed",(PyCFunction)THPModule_hasDistributed,  METH_NOARGS,  NULL},
 #ifdef WITH_CUDA
   {"_cuda_init",        (PyCFunction)THCPModule_initExtension,    METH_NOARGS,  NULL},
   {"_cuda_setDevice",   (PyCFunction)THCPModule_setDevice_wrap,   METH_O,       NULL},
@@ -523,6 +583,11 @@ static PyMethodDef TorchMethods[] = {
 #endif
   {"_safe_call",      (PyCFunction)THPModule_safeCall,          METH_VARARGS | METH_KEYWORDS, NULL},
   {"_set_default_tensor_type", (PyCFunction)THPModule_setDefaultTensorType, METH_O, NULL},
+  {"_infer_size",     (PyCFunction)THPModule_inferSize,         METH_VARARGS, NULL},
+  {"_set_backcompat_broadcast_warn", (PyCFunction)THPModule_setBackcompatBroadcastWarn, METH_O, NULL},
+  {"_get_backcompat_broadcast_warn", (PyCFunction)THPModule_getBackcompatBroadcastWarn, METH_NOARGS, NULL},
+  {"_set_backcompat_keepdim_warn", (PyCFunction)THPModule_setBackcompatKeepdimWarn, METH_O, NULL},
+  {"_get_backcompat_keepdim_warn", (PyCFunction)THPModule_getBackcompatKeepdimWarn, METH_NOARGS, NULL},
   {"get_num_threads", (PyCFunction)THPModule_getNumThreads,     METH_NOARGS,  NULL},
   {"set_num_threads", (PyCFunction)THPModule_setNumThreads,     METH_O,       NULL},
   {"from_numpy",      (PyCFunction)THPModule_fromNumpy,         METH_O,       NULL},
@@ -530,6 +595,7 @@ static PyMethodDef TorchMethods[] = {
   {"sigmoid",         (PyCFunction)THPModule_sigmoid,           METH_VARARGS | METH_KEYWORDS, NULL},
   {"log",             (PyCFunction)THPModule_log,               METH_VARARGS | METH_KEYWORDS, NULL},
   {"log1p",           (PyCFunction)THPModule_log1p,             METH_VARARGS | METH_KEYWORDS, NULL},
+  {"lgamma",          (PyCFunction)THPModule_lgamma,            METH_VARARGS | METH_KEYWORDS, NULL},
   {"exp",             (PyCFunction)THPModule_exp,               METH_VARARGS | METH_KEYWORDS, NULL},
   {"cos",             (PyCFunction)THPModule_cos,               METH_VARARGS | METH_KEYWORDS, NULL},
   {"acos",            (PyCFunction)THPModule_acos,              METH_VARARGS | METH_KEYWORDS, NULL},
@@ -727,6 +793,7 @@ PyMODINIT_FUNC init_C()
 PyMODINIT_FUNC PyInit__C()
 #endif
 {
+  THInferNumThreads();
 
 #if PY_MAJOR_VERSION == 2
 #define ASSERT_TRUE(cmd) if (!(cmd)) {PyErr_SetString(PyExc_ImportError, "initialization error"); return;}
@@ -831,8 +898,7 @@ PyMODINIT_FUNC PyInit__C()
   Py_INCREF(has_cudnn);
   ASSERT_TRUE(PyModule_AddObject(module, "has_cudnn", has_cudnn) == 0);
 
-  // TODO THD: enable once master-worker mode is implemented
-#if 0 && defined(WITH_DISTRIBUTED)
+#ifdef WITH_DISTRIBUTED_MW
   // See comment on CUDA objects
   ASSERT_TRUE(THDPDoubleStorage_init(module));
   ASSERT_TRUE(THDPFloatStorage_init(module));

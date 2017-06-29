@@ -163,9 +163,9 @@ def get_parameters(fn, handle, weight_buf):
                 # might as well merge the CUDNN ones into a single tensor as well
                 if linear_id == 0 or linear_id == num_linear_layers / 2:
                     assert filter_dim_a.prod() == filter_dim_a[0]
+                    size = (filter_dim_a[0] * num_linear_layers // 2, filter_dim_a[2])
                     param = fn.weight_buf.new().set_(
-                        weight_buf.storage(), offset,
-                        filter_dim_a[0] * num_linear_layers // 2, filter_dim_a[2])
+                        weight_buf.storage(), offset, size)
                     layer_params.append(param)
                 else:
                     assert cur_offset == offset
@@ -181,7 +181,7 @@ def _copyParams(params_from, params_to):
     for layer_params_from, layer_params_to in zip(params_from, params_to):
         for param_from, param_to in zip(layer_params_from, layer_params_to):
             assert param_from.type() == param_to.type()
-            param_to.copy_(param_from)
+            param_to.copy_(param_from, broadcast=False)
 
 
 def forward(fn, input, hx, weight, output, hy):

@@ -4,6 +4,7 @@
 #include "ChannelUtils.hpp"
 #include "DataChannel.h"
 #include "Scalar.hpp"
+#include "init_methods/InitMethod.hpp"
 
 #include <THPP/Tensor.hpp>
 
@@ -87,7 +88,7 @@ struct DataChannel {
                       rank_type dst_rank, THDGroup group_id = THDGroupWORLD) = 0;
   virtual void broadcast(thpp::Tensor& data, rank_type src_rank,
                          THDGroup group_id = THDGroupWORLD) = 0;
-  virtual void send(const Scalar& value, rank_type src_rank) = 0;
+  virtual void send(Scalar& value, rank_type src_rank) = 0;
   virtual void send(thpp::Tensor& data, rank_type dst_rank) = 0;
   virtual void receive(Scalar& value, rank_type src_rank) = 0;
   virtual void receive(thpp::Tensor& data) = 0; // receive from any source
@@ -99,7 +100,8 @@ struct DataChannel {
 
   virtual THDGroup newGroup(const std::vector<rank_type>& ranks) = 0;
 
-  static DataChannel* newChannel(THDChannelType type);
+  static DataChannel* newChannel(THDChannelType type, std::string init_method,
+                                 int world_size, std::string group_name, int rank);
 };
 
 } // namespace thd

@@ -66,27 +66,32 @@ void DataChannelGloo::RequestGloo::wait() {
   _request.wait();
 }
 
+DataChannelGloo::Group::Group(const std::string& addr, port_type port,
+                                      std::vector<rank_type> ranks, rank_type max_rank,
+                                      int store_socket)
+  : DataChannel::Group(std::move(ranks), max_rank)
+  , _store(new Store(addr, port, store_socket)) {}
 
-DataChannelGloo::DataChannelGloo()
-  : _rank(load_rank_env())
-  , _store(nullptr)
+DataChannelGloo::DataChannelGloo(InitMethod::Config config)
+  : _rank(config.rank)
+  , _listen_socket(-1)
   , _cache(nullptr)
 {
-  if (_rank == 0) {
-    _num_processes = load_world_size_env();
-  }
+  _num_processes = config.world_size;
 
   // Default options listen on this host's name.
   // NOTE: when hostname has bad configuration in `/etc/hosts` processes
   // will not connect to each other.
-  ::gloo::transport::tcp::attr attr;
+  ::gloo::transport::tcp::attr attr(config.public_address.c_str());
   _device = ::gloo::transport::tcp::CreateDevice(attr);
 
   if (_rank == 0) {
-    std::tie(_port, std::ignore) = load_master_env();
     _addr = "localhost";
+    _port = config.master.listen_port;
+    _listen_socket = config.master.listen_socket;
   } else {
-    std::tie(_addr, _port) = load_worker_env();
+    _addr = config.worker.master_addr;
+    _port = config.worker.master_port;
   }
 }
 
@@ -95,20 +100,7 @@ DataChannelGloo::~DataChannelGloo() {}
 
 
 bool DataChannelGloo::init() {
-  _store = std::unique_ptr<::gloo::rendezvous::Store>(
-    new thd::Store(_rank, _addr, _port, _num_processes)
-  );
-  _cache = std::unique_ptr<GlooCache>(new GlooCache(_rank, _device, _store));
-
-  if (_rank == 0) {
-    auto num_proc_str = std::to_string(_num_processes);
-    _store->set("world_size",
-            std::vector<char>(num_proc_str.begin(), num_proc_str.end()));
-  } else {
-    auto world_size = _store->get("world_size");
-    _num_processes = std::atoll(
-            std::string(world_size.begin(), world_size.end()).c_str());
-  }
+  _cache = std::unique_ptr<GlooCache>(new GlooCache(_rank, _device));
 
   std::vector<rank_type> ranks;
   ranks.reserve(_num_processes);
@@ -117,7 +109,7 @@ bool DataChannelGloo::init() {
 
   _groups.insert({
     THDGroupWORLD,
-    DataChannel::Group(ranks, _num_processes - 1)
+    Group(_addr, _port, ranks, _num_processes - 1, _rank == 0 ? _listen_socket : Store::CLIENT_ONLY)
   });
   return true;
 }
@@ -147,18 +139,18 @@ void DataChannelGloo::allGatherT(std::vector<thpp::Tensor*>& output,
   auto ret = _cache->getAlgorithm<CollectiveType::ALL_GATHER, T>(
     group_id, _groups.at(group_id), input_device, tensor_bytes, all_tensor_bytes, input.numel());
 
-  std::memcpy(GlooCache::input_buffer(ret).get(), input.data(), tensor_bytes);
 
   {
     std::lock_guard<std::mutex> lock(*GlooCache::mutex(ret));
+    std::memcpy(GlooCache::input_buffer(ret).get(), input.data(), tensor_bytes);
     GlooCache::algorithm(ret)->run();
+    for (std::size_t i = 0; i < output.size(); i++) {
+      std::memcpy(output.at(i)->data(),
+                  GlooCache::output_buffer(ret).get() + (i * tensor_bytes),
+                  tensor_bytes);
+    }
   }
 
-  for (std::size_t i = 0; i < output.size(); i++) {
-    std::memcpy(output.at(i)->data(),
-                GlooCache::output_buffer(ret).get() + (i * tensor_bytes),
-                tensor_bytes);
-  }
 }
 
 void DataChannelGloo::allGather(std::vector<thpp::Tensor*>& output,
@@ -198,12 +190,12 @@ void DataChannelGloo::allReduceT(thpp::Tensor& t, THDReduceOp operation,
   auto ret = _cache->getAlgorithm<CollectiveType::ALL_REDUCE, T>(
     group_id, _groups.at(group_id), getDeviceType(t), tensor_bytes, t.numel(), operation);
 
-  GlooCache::memcpy_input(ret, t);
   {
     std::lock_guard<std::mutex> lock(*GlooCache::mutex(ret));
+    GlooCache::memcpy_input(ret, t);
     GlooCache::algorithm(ret)->run();
+    GlooCache::memcpy_output(ret, t);
   }
-  GlooCache::memcpy_output(ret, t);
 }
 
 void DataChannelGloo::allReduce(thpp::Tensor& data, THDReduceOp operation,
@@ -228,18 +220,19 @@ void DataChannelGloo::broadcastT(thpp::Tensor& data, rank_type src_rank,
     group_id, _groups.at(group_id), getDeviceType(data), tensor_bytes, data.numel(),
     _groups.at(group_id).mustGetGroupRank(src_rank));
 
-  if (_rank == src_rank) {
-    GlooCache::memcpy_input(ret, data);
-  }
-
   {
     std::lock_guard<std::mutex> lock(*GlooCache::mutex(ret));
+    if (_rank == src_rank) {
+      GlooCache::memcpy_input(ret, data);
+    }
+
     GlooCache::algorithm(ret)->run();
+
+    if (_rank != src_rank) {
+      GlooCache::memcpy_output(ret, data);
+    }
   }
 
-  if (_rank != src_rank) {
-    GlooCache::memcpy_output(ret, data);
-  }
 }
 
 
@@ -250,7 +243,7 @@ void DataChannelGloo::broadcast(thpp::Tensor& data, rank_type src_rank,
 }
 
 
-void DataChannelGloo::send(const Scalar& data, rank_type dst_rank) {
+void DataChannelGloo::send(Scalar& data, rank_type dst_rank) {
   throw std::runtime_error("DataChannelGloo does not support send");
 }
 
@@ -297,7 +290,7 @@ void DataChannelGloo::barrier(THDGroup group_id) {
 
 
 THDGroup DataChannelGloo::newGroup(const std::vector<rank_type>& ranks) {
-  auto new_group = DataChannel::Group(ranks, _num_processes - 1);
+  auto new_group = DataChannelGloo::Group(_addr, _port, ranks, _num_processes - 1, Store::CLIENT_ONLY);
   THDGroup new_group_id = static_cast<THDGroup>(_groups.size());
 
   _groups.insert({new_group_id, new_group});

@@ -12,6 +12,7 @@
 #include <type_traits>
 #include <unordered_map>
 #include <vector>
+#include <cstring>
 
 namespace thpp {
 
@@ -30,6 +31,8 @@ struct Tensor {
   virtual Tensor* newNarrow(int dimension, long firstIndex, long size) const = 0;
   virtual Tensor* newTranspose(int dimension1, int dimension2) const = 0;
   virtual Tensor* newUnfold(int dimension, long size, long step) const = 0;
+  virtual Tensor* newExpand(const long_range& size) const = 0;
+  virtual Tensor* newView(const long_range& size) const = 0;
 
   virtual int nDim() const = 0;
   virtual long_range sizes() const = 0;
@@ -105,13 +108,13 @@ struct Tensor {
   virtual Tensor& cdiv(const Tensor& src1, const Tensor& src2) = 0;
   virtual Tensor& cfmod(const Tensor& src1, const Tensor& src2) = 0;
   virtual Tensor& cremainder(const Tensor& src1, const Tensor& src2) = 0;
-  virtual Tensor& max(const Tensor& indices_, const Tensor& src, int dimension) = 0;
-  virtual Tensor& min(const Tensor& indices_, const Tensor& src, int dimension) = 0;
-  virtual Tensor& kthvalue(const Tensor& indices_, const Tensor& src, long k, int dimension) = 0;
-  virtual Tensor& mode(const Tensor& indices_, const Tensor& src, int dimension) = 0;
-  virtual Tensor& median(const Tensor& indices_, const Tensor& src, int dimension) = 0;
-  virtual Tensor& sum(const Tensor& src, int dimension) = 0;
-  virtual Tensor& prod(const Tensor& src, int dimension) = 0;
+  virtual Tensor& max(const Tensor& indices_, const Tensor& src, int dimension, int keepdim) = 0;
+  virtual Tensor& min(const Tensor& indices_, const Tensor& src, int dimension, int keepdim) = 0;
+  virtual Tensor& kthvalue(const Tensor& indices_, const Tensor& src, long k, int dimension, int keepdim) = 0;
+  virtual Tensor& mode(const Tensor& indices_, const Tensor& src, int dimension, int keepdim) = 0;
+  virtual Tensor& median(const Tensor& indices_, const Tensor& src, int dimension, int keepdim) = 0;
+  virtual Tensor& sum(const Tensor& src, int dimension, int keepdim) = 0;
+  virtual Tensor& prod(const Tensor& src, int dimension, int keepdim) = 0;
   virtual Tensor& cumsum(const Tensor& src, int dimension) = 0;
   virtual Tensor& cumprod(const Tensor& src, int dimension) = 0;
   virtual Tensor& sign(const Tensor& source) = 0;
@@ -175,9 +178,9 @@ struct Tensor {
   virtual Tensor& round(const Tensor& src) = 0;
   virtual Tensor& trunc(const Tensor& src) = 0;
   virtual Tensor& frac(const Tensor& src) = 0;
-  virtual Tensor& mean(const Tensor& src, int dimension) = 0;
-  virtual Tensor& std(const Tensor& src, int dimension, int flag) = 0;
-  virtual Tensor& var(const Tensor& src, int dimension, int flag) = 0;
+  virtual Tensor& mean(const Tensor& src, int dimension, int keepdim) = 0;
+  virtual Tensor& std(const Tensor& src, int dimension, int flag, int keepdim) = 0;
+  virtual Tensor& var(const Tensor& src, int dimension, int flag, int keepdim) = 0;
   virtual Tensor& rand(const Generator& _generator, THLongStorage *size) = 0;
   virtual Tensor& randn(const Generator& _generator, THLongStorage *size) = 0;
 
@@ -283,7 +286,7 @@ struct TensorScalarInterface : public Tensor {
   virtual TensorScalarInterface& pow(const Tensor& src, scalar_type value) = 0;
   virtual TensorScalarInterface& tpow(scalar_type value, const Tensor& src) = 0;
   virtual TensorScalarInterface& lerp(const Tensor& a, const Tensor& b, scalar_type weight) = 0;
-  virtual TensorScalarInterface& norm(const Tensor& src, scalar_type value, int dimension) = 0;
+  virtual TensorScalarInterface& norm(const Tensor& src, scalar_type value, int dimension, int keepdim) = 0;
   virtual TensorScalarInterface& renorm(const Tensor& src, scalar_type value, int dimension, scalar_type maxnorm) = 0;
   virtual TensorScalarInterface& histc(const Tensor& src, long nbins, scalar_type minvalue, scalar_type maxvalue) = 0;
   virtual TensorScalarInterface& bhistc(const Tensor& src, long nbins, scalar_type minvalue, scalar_type maxvalue) = 0;
